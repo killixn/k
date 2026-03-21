@@ -1,5 +1,5 @@
 # # start a fancy GUI
-# display_library: x, options="gui_debug"
+display_library: sdl2, options="gui_debug"
 
 # Have a sane clock
 clock: sync=realtime
@@ -15,6 +15,7 @@ boot: cdrom
 # write serial logs to stdout
 com1: enabled=1, mode=file, dev=/dev/stdout
 
+magic_break: enabled=1
 
 # log: out.log
 # #debugger_out: /dev/stdout

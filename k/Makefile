@@ -30,7 +30,11 @@ OBJS	= \
 	  libvga.o \
 	  list.o \
 	  memory.o \
-	  panic.o \
+	  serial.o \
+	  gdt.o \
+	  idt.o \
+	  interrupt_stub.o \
+#	  panic.o \
 
 
 DEPS = $(OBJS:.o=.d)
