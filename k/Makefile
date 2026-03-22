@@ -33,7 +33,10 @@ OBJS	= \
 	  serial.o \
 	  gdt.o \
 	  idt.o \
+	  pic.o \
 	  interrupt_stub.o \
+	  keyboard.o \
+	  timer.o \
 #	  panic.o \
 
 

@@ -1,0 +1,80 @@
+#include "keyboard.h"
+
+#include <k/kstd.h>
+
+#include "io.h"
+#include "keyboard.h"
+#include "pic.h"
+
+struct key_fifo keyboard_fifo;
+
+// Init FIFO
+static void fifo_init(struct key_fifo *f)
+{
+    f->head = 0;
+    f->tail = 0;
+}
+
+// Push a key in the FIFO
+static int fifo_push(struct key_fifo *f, struct key_event ev)
+{
+    unsigned int next = (f->head + 1) % FIFO_SIZE;
+
+    if (next == f->tail)
+        return -1;
+
+    f->buffer[f->head] = ev;
+    f->head = next;
+
+    return 0;
+}
+
+// Pop a key from the FIFO
+static int fifo_pop(struct key_fifo *f, struct key_event *ev)
+{
+    if (f->head == f->tail)
+        return -1;
+
+    *ev = f->buffer[f->tail];
+    f->tail = (f->tail + 1) % FIFO_SIZE;
+
+    return 0;
+}
+
+void init_keyboard()
+{
+    fifo_init(&keyboard_fifo);
+    // Update the PIC to unmask the IRQ line 1
+    irq_clear_mask(1);
+}
+
+/*
+DESCRIPTION
+    readkey() returns the key events as a FIFO.
+RETURN VALUE
+    readkey() returns 0 in case of success.
+ERRORS
+    -EAGAIN no key event since last call.
+*/
+int readkey(struct key_event *event)
+{
+    if (fifo_pop(&keyboard_fifo, event) < 0)
+        return -EAGAIN;
+
+    return 0;
+}
+
+void keyboard_irq_handler()
+{
+    // Read scancodes from I/O port 0x60
+    int scancode = inb(0x60);
+    // Read status register from port 0x64
+    // int status_register = inb(0x60);
+
+    // Recover state
+    // read page 26/37 https://k.lre.epita.fr/data/slides/kern-3.pdf
+    int curr_state = (scancode & 0x80) ? KEY_RELEASED : KEY_PRESSED;
+
+    struct key_event event = { .state = curr_state, .key = scancode };
+    fifo_push(&keyboard_fifo, event);
+}

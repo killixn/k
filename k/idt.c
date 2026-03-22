@@ -2,77 +2,10 @@
 
 #include <k/kstd.h>
 
-#include "io.h"
+#include "keyboard.h"
+#include "pic.h"
 #include "stdio.h"
-
-// PIC Ports
-// from https://wiki.osdev.org/8259_PIC#Common_Definitions
-// (+ https://k.lre.epita.fr/data/slides/kern-3.pdf)
-#define PIC1 0x20 /* IO base address for master PIC */
-#define PIC2 0xA0 /* IO base address for slave PIC */
-#define PIC1_COMMAND PIC1
-#define PIC1_DATA (PIC1 + 1)
-#define PIC2_COMMAND PIC2
-#define PIC2_DATA (PIC2 + 1)
-
-// from https://wiki.osdev.org/8259_PIC#End_of_Interrupt
-#define PIC_EOI 0x20 /* End-of-interrupt command code */
-
-// reinitialize the PIC controllers, giving them specified vector offsets rather
-// than 8h and 70h, as configured by default
-// from https://wiki.osdev.org/8259_PIC#Initialisation
-#define ICW1_ICW4 0x01 // Indicates that ICW4 will be present
-#define ICW1_SINGLE 0x02 // Single (cascade) mode
-#define ICW1_INTERVAL4 0x04 // Call address interval 4 (8)
-#define ICW1_LEVEL 0x08 // Level triggered (edge) mode
-#define ICW1_INIT 0x10 // Initialization - required!
-
-#define ICW4_8086 0x01 // 8086/88 (MCS-80/85) mode
-#define ICW4_AUTO 0x02 // Auto (normal) EOI
-#define ICW4_BUF_SLAVE 0x08 // Buffered mode/slave
-#define ICW4_BUF_MASTER 0x0C // Buffered mode/master
-#define ICW4_SFNM 0x10 // Special fully nested (not)
-
-#define CASCADE_IRQ 2
-
-/*
-arguments:
-    offset1 - vector offset for master PIC
-        vectors on the master become offset1..offset1+7
-    offset2 - same for slave PIC: offset2..offset2+7
-*/
-// from https://wiki.osdev.org/8259_PIC#Initialisation
-void PIC_remap(int offset1, int offset2)
-{
-    // starts the initialization sequence (in cascade mode)
-    outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
-    outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
-    // ICW2: Master PIC vector offset
-    outb(PIC1_DATA, offset1);
-    // ICW2: Slave PIC vector offset
-    outb(PIC2_DATA, offset2);
-    // ICW3: tell Master PIC that there is a slave PIC at IRQ2
-    outb(PIC1_DATA, 1 << CASCADE_IRQ);
-    // ICW3: tell Slave PIC its cascade identity (0000 0010)
-    outb(PIC2_DATA, 2);
-
-    // ICW4: have the PICs use 8086 mode (and not 8080 mode)
-    outb(PIC1_DATA, ICW4_8086);
-    outb(PIC2_DATA, ICW4_8086);
-
-    // Unmask both PICs
-    outb(PIC1_DATA, 0);
-    outb(PIC2_DATA, 0);
-}
-
-// from https://wiki.osdev.org/8259_PIC#End_of_Interrupt
-void PIC_sendEOI(u8 irq)
-{
-    if (irq >= 8)
-        outb(PIC2_COMMAND, PIC_EOI);
-
-    outb(PIC1_COMMAND, PIC_EOI);
-}
+#include "timer.h"
 
 static struct idt_entry_t idt[256];
 
@@ -178,10 +111,10 @@ void irq_handler(struct trap_frame *trap)
     // Typical wiring of the PIC (Master)
     // from https://k.lre.epita.fr/data/slides/kern-3.pdf
     case 32:
-        printf("PIT\r\n");
+        pit_irq_handler();
         break;
     case 33:
-        printf("Keyboard\r\n");
+        keyboard_irq_handler();
         break;
     case 34:
         printf("Not assigned in PC/XT; cascaded to slave 8256\r\n");
@@ -228,15 +161,13 @@ void irq_handler(struct trap_frame *trap)
     case 47:
         printf("Hard disk controller 2\r\n");
         break;
-        /*
-        default:
-            printf("Unhandled interrupt: %d\r\n", trap->vector);
-            break;
-        */
+    default:
+        printf("Unhandled interrupt: %d\r\n", trap->vector);
+        break;
     }
 
     // IRQ[0] = vector - 32
-    PIC_sendEOI(trap->vector - 32);
+    pic_send_eoi(trap->vector - 32);
 }
 
 void load_idt()
@@ -250,7 +181,7 @@ void load_idt()
     idtr.limit = sizeof(idt) - 1; /* idt size - 1 */
 
     // PIC remap
-    PIC_remap(32, 40);
+    pic_remap(32, 40);
 
     // Set the ISR entries at last
     // from https://wiki.osdev.org/Interrupts_Tutorial#Assembling

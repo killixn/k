@@ -25,25 +25,32 @@
 
 #include "gdt.h"
 #include "idt.h"
+#include "keyboard.h"
 #include "multiboot.h"
 #include "stdio.h"
+#include "timer.h"
 
 void k_main(unsigned long magic, multiboot_info_t *info)
 {
     (void)magic;
     (void)info;
 
-    // init_stack();
-    // printf("[INFO] stack initialized\r\n");
+    /*
+    memory_init(info);
+    init_stack();
+    printf("[INFO] stack initialized\r\n");
+    */
     load_gdt();
     printf("[INFO] gdt loaded\r\n");
     load_idt();
     printf("[INFO] idt loaded\r\n");
+    init_keyboard();
+    printf("[INFO] keyboard initialized\r\n");
+    init_timer();
+    printf("[INFO] timer initialized\r\n");
 
     char star[5] = "|/-\\";
     char *fb = (void *)0xb8000;
-
-    printf("bite\r\n");
 
     for (unsigned i = 0;;)
     {
