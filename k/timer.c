@@ -1,7 +1,5 @@
 #include "timer.h"
 
-#include <k/kstd.h>
-
 #include "io.h"
 
 volatile unsigned long tick;
@@ -29,6 +27,7 @@ void init_timer()
     int divider = internal_frequency / desired_frequency;
     // counter 0 on port 0x40
     // read page 32/37 from https://k.lre.epita.fr/data/slides/kern-3.pdf
+    // io = 0b11 ->  LSB first, then MSB
     outb(0x40, divider & 0xFF); // LSB
     outb(0x40, (divider >> 8) & 0xFF); // MSB
 }

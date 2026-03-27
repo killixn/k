@@ -5,8 +5,23 @@
 #include <k/kstd.h>
 
 #include "memory.h"
+#include "stdio.h"
 
 static struct gdt_desc gdt[6];
+
+void gdt_prettyprint()
+{
+    for (size_t i = 0; i < sizeof(gdt) / sizeof(gdt[0]); i++)
+    {
+        printf("GDT %lu:\r\n", i);
+        printf("\tlimit:\t0x%.08x\r\n", gdt[i].limit_15_00);
+        printf("\tbase_1:\t0x%.08x\r\n", gdt[i].base_15_00);
+        printf("\tbase_2:\t0x%.08x\r\n", gdt[i].base_23_16);
+        printf("\taccess:\t0x%.02x\r\n", gdt[i].access);
+        printf("\tflags:\t0x%.02x\r\n", gdt[i].flags_and_limit_19_16);
+        printf("\tbase_3:\t0x%.08x\r\n", gdt[i].base_31_24);
+    }
+}
 
 // from https://wiki.osdev.org/GDT_Tutorial#Filling_the_Table
 static void init_gdt_entry(struct gdt_desc *target, u32 base, u32 limit,

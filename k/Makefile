@@ -37,6 +37,9 @@ OBJS	= \
 	  interrupt_stub.o \
 	  keyboard.o \
 	  timer.o \
+	  syscall.o \
+	  syscall_wrapper.o \
+	  vga.o \
 #	  panic.o \
 
 

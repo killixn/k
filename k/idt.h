@@ -37,6 +37,9 @@ extern void isr_29();
 extern void isr_30();
 extern void isr_31();
 
+// isr for syscall
+extern void isr_128();
+
 extern void irq_0();
 extern void irq_1();
 extern void irq_2();
@@ -62,7 +65,7 @@ struct idt_entry_t
     u16 selector; // a code segment selector in GDT or LDT
     u8 zero; // unused, set to 0
     u8 type_attributes; // gate type, dpl, and p fields
-    u16 offset_2; // offset bits 16..31} __attribute__((packed));
+    u16 offset_2; // offset bits 16..31
 } __attribute__((packed));
 
 // idt_r struct
@@ -73,28 +76,14 @@ struct idt_r
     u32 base;
 } __attribute__((packed));
 
-struct trap_frame
+struct regs
 {
-    u32 gs;
-    u32 fs;
-    u32 es;
-    u32 ds;
-
-    u32 edi;
-    u32 esi;
-    u32 ebp;
-    u32 esp;
-    u32 ebx;
-    u32 edx;
-    u32 ecx;
-    u32 eax;
+    u32 edi, esi, ebp, esp, ebx, edx, ecx, eax;
 
     u32 vector;
     u32 error;
 
-    u32 eip;
-    u32 cs;
-    u32 eflags;
+    u32 eip, cs, eflags;
 };
 
 void load_idt();

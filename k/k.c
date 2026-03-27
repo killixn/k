@@ -26,8 +26,10 @@
 #include "gdt.h"
 #include "idt.h"
 #include "keyboard.h"
+#include "memory.h"
 #include "multiboot.h"
 #include "stdio.h"
+#include "syscall.h"
 #include "timer.h"
 
 void k_main(unsigned long magic, multiboot_info_t *info)
@@ -48,6 +50,20 @@ void k_main(unsigned long magic, multiboot_info_t *info)
     printf("[INFO] keyboard initialized\r\n");
     init_timer();
     printf("[INFO] timer initialized\r\n");
+    init_syscall();
+    printf("[INFO] syscall table initialized\r\n");
+
+    /*
+    int res;
+    __asm__ volatile("mov $0, %%eax\n"
+                     "mov $0, %%ebx\n"
+                     "int $0x80\n"
+                     "mov %%eax, %0\n"
+                     : "=r"(res)
+                     :
+                     : "eax", "ebx");
+    printf("[DEBUG] eax=%d\r\n", res);
+    */
 
     char star[5] = "|/-\\";
     char *fb = (void *)0xb8000;

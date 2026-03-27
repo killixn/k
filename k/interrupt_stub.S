@@ -24,8 +24,8 @@ isr_\num:
 .macro irq_stub num, map
 .global irq_\num
 irq_\num:
-    push	$0
-    push	$\map
+    pushl	$0
+    pushl	$\map
     jmp	isr_common
 .endm
 
@@ -35,33 +35,15 @@ irq_\num:
 .global isr_common
 isr_common:
   # <save registers>
-  # pusha -> pushes registers in this order :
-  # eax, ecx, edx, ebx, original esp, ebp, esi, edi
+  # pushes registers in this order :
+  #     eax, ecx, edx, ebx, original esp, ebp, esi, edi
   pusha
-
-  # <save segments>
-  push %ds
-  push %es
-  push %fs
-  push %gs
-  
-  mov $0x10, %ax
-  mov %ax, %ds
-  mov %ax, %es
-  mov %ax, %fs
-  mov %ax, %gs
-  cld
 
   pushl %esp
   call irq_handler
   add $4, %esp
 
   # <restore registers>
-  pop %gs
-  pop %fs
-  pop %es
-  pop %ds
-
   popa
 
   add $8, %esp
@@ -100,6 +82,7 @@ isr_no_err_stub 28
 isr_no_err_stub 29
 isr_no_err_stub 30
 isr_no_err_stub 31
+isr_no_err_stub 128
 
 irq_stub 0, 32
 irq_stub 1, 33

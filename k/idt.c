@@ -5,6 +5,7 @@
 #include "keyboard.h"
 #include "pic.h"
 #include "stdio.h"
+#include "syscall.h"
 #include "timer.h"
 
 static struct idt_entry_t idt[256];
@@ -35,11 +36,11 @@ void idt_set_descriptor(u8 vector, void *isr, u8 flags)
     descriptor->offset_2 = (u32)isr >> 16;
 }
 
-void irq_handler(struct trap_frame *trap)
+void irq_handler(struct regs *r)
 {
     // Exceptions CPU
     // from https://k.lre.epita.fr/data/slides/kern-3.pdf
-    switch (trap->vector)
+    switch (r->vector)
     {
     case 0:
         printf("Divide by 0\r\n");
@@ -161,13 +162,20 @@ void irq_handler(struct trap_frame *trap)
     case 47:
         printf("Hard disk controller 2\r\n");
         break;
+    case 128:
+        // printf("Syscall intercepted\r\n");
+        syscall_handler(r);
+        break;
     default:
-        printf("Unhandled interrupt: %d\r\n", trap->vector);
+        printf("Unhandled interrupt: %d\r\n", r->vector);
         break;
     }
 
     // IRQ[0] = vector - 32
-    pic_send_eoi(trap->vector - 32);
+    if (r->vector >= 32 && r->vector <= 47)
+    {
+        pic_send_eoi(r->vector - 32);
+    }
 }
 
 void load_idt()
@@ -181,7 +189,7 @@ void load_idt()
     idtr.limit = sizeof(idt) - 1; /* idt size - 1 */
 
     // PIC remap
-    pic_remap(32, 40);
+    pic_remap(32, 47);
 
     // Set the ISR entries at last
     // from https://wiki.osdev.org/Interrupts_Tutorial#Assembling
@@ -207,6 +215,8 @@ void load_idt()
     {
         idt_set_descriptor(32 + i, irq_table[i], 0x8E);
     }
+
+    idt_set_descriptor(128, isr_128, 0xEE);
 
     // Load the new IDT
     // from https://k.lre.epita.fr/data/slides/kern-3.pdf

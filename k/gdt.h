@@ -22,6 +22,7 @@ struct gdt_desc
     u8 base_31_24;
 } __attribute__((packed));
 
+void gdt_prettyprint();
 void init_stack();
 void load_gdt();
 void load_tss();
