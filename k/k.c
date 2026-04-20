@@ -21,8 +21,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <k/atapi.h>
 #include <k/kstd.h>
 
+#include "elf.h"
 #include "gdt.h"
 #include "idt.h"
 #include "keyboard.h"
@@ -32,18 +34,16 @@
 #include "syscall.h"
 #include "timer.h"
 
-void k_main(unsigned long magic, multiboot_info_t *info)
+void k_main_post_stack(unsigned long magic, multiboot_info_t *info,
+                       u32 stack_top)
 {
     (void)magic;
     (void)info;
 
-    /*
-    memory_init(info);
-    init_stack();
-    printf("[INFO] stack initialized\r\n");
-    */
     load_gdt();
     printf("[INFO] gdt loaded\r\n");
+    load_tss(stack_top);
+    printf("[INFO] tss loaded\r\n");
     load_idt();
     printf("[INFO] idt loaded\r\n");
     init_keyboard();
@@ -52,6 +52,8 @@ void k_main(unsigned long magic, multiboot_info_t *info)
     printf("[INFO] timer initialized\r\n");
     init_syscall();
     printf("[INFO] syscall table initialized\r\n");
+    discover_atapi_drive();
+    printf("[INFO] atapi drive discovered\r\n");
 
     /*
     int res;
@@ -65,8 +67,29 @@ void k_main(unsigned long magic, multiboot_info_t *info)
     printf("[DEBUG] eax=%d\r\n", res);
     */
 
+    void *block = read_block(0x10);
+    disk_pretty_print(block, 1);
+
     char star[5] = "|/-\\";
     char *fb = (void *)0xb8000;
+
+    for (;;)
+    {
+        struct key_event event;
+
+        // keep looping if no event
+        if (readkey(&event) != 0)
+            continue;
+
+        // Only handle key presses
+        if (event.state != KEY_PRESSED)
+            continue;
+
+        // Write the scancode as a char
+        *fb = (char)event.key;
+        // VGA -> char + attribute byte interleaved
+        fb += 2;
+    }
 
     for (unsigned i = 0;;)
     {
@@ -75,4 +98,23 @@ void k_main(unsigned long magic, multiboot_info_t *info)
 
     for (;;)
         asm volatile("hlt");
+}
+
+void k_main(unsigned long magic, multiboot_info_t *info)
+{
+    (void)magic;
+    (void)info;
+
+    memory_init(info);
+
+    void *stack = memory_reserve(0x4000);
+    u32 stack_top = (u32)stack + 0x4000;
+    __asm__ volatile("mov %0, %%esp\n"
+                     "mov %0, %%ebp\n"
+                     : /* no output */
+                     : "r"(stack_top));
+
+    printf("[INFO] stack initialized\r\n");
+
+    k_main_post_stack(magic, info, stack_top);
 }

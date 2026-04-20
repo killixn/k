@@ -1,7 +1,9 @@
 #include <k/kstd.h>
 
+#include "fs.h"
 #include "idt.h"
 #include "keyboard.h"
+#include "sbrk.h"
 #include "serial.h"
 #include "stdio.h"
 #include "timer.h"
@@ -26,10 +28,10 @@ int sys_write(struct regs *r)
 
 int sys_sbrk(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return (int)sbrk((ssize_t)r->ebx);
 }
 
+/* Legacy system call, do not implement */
 int sys_getkey(struct regs *r)
 {
     (void)r;
@@ -44,26 +46,22 @@ int sys_gettick(struct regs *r)
 
 int sys_open(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return open((char *)r->ebx, (int)r->ecx);
 }
 
 int sys_read(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return read((int)r->ebx, (void *)r->ecx, (size_t)r->edx);
 }
 
 int sys_seek(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return seek((int)r->ebx, (off_t)r->ecx, (int)r->edx);
 }
 
 int sys_close(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return close((int)r->ebx);
 }
 
 int sys_setvideo(struct regs *r)

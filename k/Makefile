@@ -40,6 +40,9 @@ OBJS	= \
 	  syscall.o \
 	  syscall_wrapper.o \
 	  vga.o \
+	  fs.o \
+	  atapi.o \
+	  sbrk.o \
 #	  panic.o \
 
 

@@ -6,6 +6,10 @@
 #include "keyboard.h"
 #include "pic.h"
 
+// Track modifier state
+static int shift_pressed = 0;
+static int caps_lock = 0;
+
 struct key_fifo keyboard_fifo;
 
 // Init FIFO
@@ -69,12 +73,38 @@ void keyboard_irq_handler()
     // Read scancodes from I/O port 0x60
     int scancode = inb(0x60);
     // Read status register from port 0x64
-    // int status_register = inb(0x60);
+    // int status_register = inb(0x64);
+
+    int is_release = (scancode & 0x80);
+    int key = scancode & ~0x80; // strip the release bit
+
+    // Track shift keys
+    if (key == KEY_LSHIFT || key == KEY_RSHIFT)
+    {
+        shift_pressed = !is_release;
+        return;
+    }
+
+    // Toggle caps lock on press only
+    if (key == KEY_MAJLOCK && !is_release)
+    {
+        caps_lock = !caps_lock;
+        return;
+    }
 
     // Recover state
     // read page 26/37 https://k.lre.epita.fr/data/slides/kern-3.pdf
     int curr_state = (scancode & 0x80) ? KEY_RELEASED : KEY_PRESSED;
 
-    struct key_event event = { .state = curr_state, .key = scancode };
+    // Translate scancode to ASCII
+    char c = 0;
+    int use_shift = shift_pressed ^ caps_lock;
+
+    if (key < (int)sizeof(keymap_normal))
+    {
+        c = use_shift ? keymap_shift[key] : keymap_normal[key];
+    }
+
+    struct key_event event = { .state = curr_state, .key = c ? c : key };
     fifo_push(&keyboard_fifo, event);
 }

@@ -8,6 +8,7 @@
 #include "stdio.h"
 
 static struct gdt_desc gdt[6];
+tss_entry_t tss_entry;
 
 void gdt_prettyprint()
 {
@@ -100,16 +101,5 @@ void load_gdt()
 
 // TODO : load_tss()
 // read https://wiki.osdev.org/Getting_to_Ring_3
-void load_tss()
+void load_tss(u32 stack_top)
 {}
-
-// Init a Stack
-void init_stack()
-{
-    void *stack = memory_reserve(0x4000);
-    u32 stack_top = (u32)stack + 0x4000;
-    __asm__ volatile("mov %0, %%esp\n"
-                     "mov %0, %%ebp\n"
-                     : /* no output */
-                     : "r"(stack_top));
-}
