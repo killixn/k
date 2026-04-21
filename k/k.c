@@ -23,6 +23,7 @@
  */
 #include <k/atapi.h>
 #include <k/kstd.h>
+#include <k/types.h>
 
 #include "elf.h"
 #include "gdt.h"
@@ -34,28 +35,28 @@
 #include "syscall.h"
 #include "timer.h"
 
-void k_main_post_stack(unsigned long magic, multiboot_info_t *info,
-                       u32 stack_top)
+#define STACK_SIZE 0x4000
+
+static void k_main_post_stack(multiboot_info_t *info, u32 stack_top)
 {
-    (void)magic;
-    (void)info;
-
-    load_gdt();
-    printf("[INFO] gdt loaded\r\n");
-    load_tss(stack_top);
-    printf("[INFO] tss loaded\r\n");
+    load_gdt(stack_top);
+    printf("[i] gdt loaded\r\n");
     load_idt();
-    printf("[INFO] idt loaded\r\n");
+    printf("[i] idt loaded\r\n");
     init_keyboard();
-    printf("[INFO] keyboard initialized\r\n");
+    printf("[i] keyboard initialized\r\n");
     init_timer();
-    printf("[INFO] timer initialized\r\n");
+    printf("[i] timer initialized\r\n");
     init_syscall();
-    printf("[INFO] syscall table initialized\r\n");
+    printf("[i] syscall table initialized\r\n");
     discover_atapi_drive();
-    printf("[INFO] atapi drive discovered\r\n");
+    printf("[i] atapi drive discovered\r\n");
+    init_elf(info);
+    printf("[i] elf initialized\r\n");
 
-    /*
+    /* UNREACHABLE */
+
+    // System call calling for debug
     int res;
     __asm__ volatile("mov $0, %%eax\n"
                      "mov $0, %%ebx\n"
@@ -64,20 +65,17 @@ void k_main_post_stack(unsigned long magic, multiboot_info_t *info,
                      : "=r"(res)
                      :
                      : "eax", "ebx");
-    printf("[DEBUG] eax=%d\r\n", res);
-    */
+    printf("[d] eax=%d\r\n", res);
 
-    void *block = read_block(0x10);
-    disk_pretty_print(block, 1);
-
-    char star[5] = "|/-\\";
+    // Frame Buffer
     char *fb = (void *)0xb8000;
 
+    // Keys printer
     for (;;)
     {
         struct key_event event;
 
-        // keep looping if no event
+        // Keep looping if no event
         if (readkey(&event) != 0)
             continue;
 
@@ -91,30 +89,34 @@ void k_main_post_stack(unsigned long magic, multiboot_info_t *info,
         fb += 2;
     }
 
+    // Flipping star
+    char star[5] = "|/-\\";
     for (unsigned i = 0;;)
-    {
         *fb = star[i++ % 4];
-    }
 
     for (;;)
         asm volatile("hlt");
 }
 
+// Kernel Entry Function
 void k_main(unsigned long magic, multiboot_info_t *info)
 {
     (void)magic;
-    (void)info;
 
+    // Init memory
     memory_init(info);
 
-    void *stack = memory_reserve(0x4000);
-    u32 stack_top = (u32)stack + 0x4000;
+    // Reserve a new stack
+    // from https://k.lre.epita.fr/assignments/memory_manager.html
+    void *stack = memory_reserve(STACK_SIZE);
+    u32 stack_top = (u32)stack + STACK_SIZE;
     __asm__ volatile("mov %0, %%esp\n"
                      "mov %0, %%ebp\n"
                      : /* no output */
                      : "r"(stack_top));
 
-    printf("[INFO] stack initialized\r\n");
+    printf("[i] stack initialized\r\n");
 
-    k_main_post_stack(magic, info, stack_top);
+    // Stack alignment
+    k_main_post_stack(info, stack_top);
 }

@@ -76,14 +76,24 @@ struct idt_r
     u32 base;
 } __attribute__((packed));
 
+// regs struct
 struct regs
 {
-    u32 edi, esi, ebp, esp, ebx, edx, ecx, eax;
+    u32 edi;
+    u32 esi;
+    u32 ebp;
+    u32 esp;
+    u32 ebx;
+    u32 edx;
+    u32 ecx;
+    u32 eax;
 
     u32 vector;
     u32 error;
 
-    u32 eip, cs, eflags;
+    u32 eip;
+    u32 cs;
+    u32 eflags;
 };
 
 void load_idt();

@@ -78,6 +78,8 @@ case EM_486:                                                                   \
 
 #include <k/kstd.h>
 
+#include "multiboot.h"
+
 typedef u8 Elf_Byte;
 
 typedef u32 Elf32_Addr;
@@ -684,12 +686,6 @@ int exec_elf_setup_stack __P((struct proc *, struct exec_package *));
 
 #endif /* _KERNEL */
 
-int elf_check_file(Elf32_Ehdr *hdr);
-int elf_check_supported(Elf32_Ehdr *hdr);
-void *elf_load_file(void *file);
-int elf_load_stage1(Elf32_Ehdr *hdr);
-int elf_load_stage2(Elf32_Ehdr *hdr);
-int elf_do_reloc(Elf32_Ehdr *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab);
-void *load_segment_to_memory(void *mem, Elf32_Phdr *phdr, int elf_fd);
+void init_elf(multiboot_info_t *info);
 
 #endif /* !_SYS_EXEC_ELF_H_ */

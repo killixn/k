@@ -22,6 +22,7 @@ struct gdt_desc
     u8 base_31_24;
 } __attribute__((packed));
 
+// tss_entry_struct struct
 struct tss_entry_struct
 {
     // The previous TSS
@@ -62,7 +63,6 @@ struct tss_entry_struct
 typedef struct tss_entry_struct tss_entry_t;
 
 void gdt_prettyprint();
-void load_gdt();
-void load_tss(u32 stack_top);
+void load_gdt(u32 stack_top);
 
 #endif /* GDT_H */

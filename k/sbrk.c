@@ -1,15 +1,10 @@
+// https://k.lre.epita.fr/assignments/sbrk.html
+
 #include "sbrk.h"
 
-static u8 *heap_start;
+u8 *heap_start;
 u8 *heap_end;
 u8 *heap_limit;
-
-void init_sbrk(u8 *start, u8 *limit)
-{
-    heap_start = start;
-    heap_end = start;
-    heap_limit = limit;
-}
 
 /*
 NAME
@@ -33,4 +28,11 @@ void *sbrk(ssize_t increment)
 
     heap_end += increment;
     return (void *)prev_heap_end;
+}
+
+void init_sbrk(u8 *start, u8 *limit)
+{
+    heap_start = start;
+    heap_end = start;
+    heap_limit = limit;
 }

@@ -1,331 +1,210 @@
 #include "elf.h"
 
+#include <string.h>
+
+#include "fs.h"
+#include "memory.h"
+#include "multiboot.h"
+#include "sbrk.h"
 #include "stdio.h"
 
-int elf_check_file(Elf32_Ehdr *hdr)
+#define SEG_UDATA 0x23
+#define SEG_UCODE 0x1B
+
+#define USER_STACK_SIZE 0x4000
+#define USER_HEAP_SIZE 0x800000
+
+// Ensure ELF Validity
+// from https://wiki.osdev.org/ELF_Tutorial#Checking_the_ELF_Header
+static int elf_check_file(Elf32_Ehdr *hdr)
 {
     if (!hdr)
         return 0;
     if (hdr->e_ident[EI_MAG0] != ELFMAG0)
     {
-        printf("ELF Header EI_MAG0 incorrect.\n");
+        printf("[i] ELF Header EI_MAG0 incorrect\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_MAG1] != ELFMAG1)
     {
-        printf("ELF Header EI_MAG1 incorrect.\n");
+        printf("[i] ELF Header EI_MAG1 incorrect\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_MAG2] != ELFMAG2)
     {
-        printf("ELF Header EI_MAG2 incorrect.\n");
+        printf("[i] ELF Header EI_MAG2 incorrect\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_MAG3] != ELFMAG3)
     {
-        printf("ELF Header EI_MAG3 incorrect.\n");
+        printf("[i] ELF Header EI_MAG3 incorrect\r\n");
         return 0;
     }
     return 1;
 }
 
-int elf_check_supported(Elf32_Ehdr *hdr)
+// from https://wiki.osdev.org/ELF_Tutorial#Checking_the_ELF_Header
+static int elf_check_supported(Elf32_Ehdr *hdr)
 {
     if (!elf_check_file(hdr))
     {
-        printf("Invalid ELF File.\n");
+        printf("[i] Invalid ELF File\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_CLASS] != ELFCLASS32)
     {
-        printf("Unsupported ELF File Class.\n");
+        printf("[i] Unsupported ELF File Class\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_DATA] != ELFDATA2LSB)
     {
-        printf("Unsupported ELF File byte order.\n");
+        printf("[i] Unsupported ELF File byte order\r\n");
         return 0;
     }
     if (hdr->e_machine != EM_386)
     {
-        printf("Unsupported ELF File target.\n");
+        printf("[i] Unsupported ELF File target\r\n");
         return 0;
     }
     if (hdr->e_ident[EI_VERSION] != EV_CURRENT)
     {
-        printf("Unsupported ELF File version.\n");
+        printf("[i] Unsupported ELF File version\r\n");
         return 0;
     }
     if (hdr->e_type != ET_REL && hdr->e_type != ET_EXEC)
     {
-        printf("Unsupported ELF File type.\n");
+        printf("[i] Unsupported ELF File type\r\n");
         return 0;
     }
     return 1;
 }
 
-static inline void *elf_load_rel(Elf32_Ehdr *hdr)
-{
-    int result;
-    result = elf_load_stage1(hdr);
-    if (result == -1)
-    {
-        printf("Unable to load ELF file.\n");
-        return NULL;
-    }
-
-    result = elf_load_stage2(hdr);
-    if (result == -1)
-    {
-        printf("Unable to load ELF file.\n");
-        return NULL;
-    }
-
-    // TODO : Parse the program header (if present)
-    return (void *)hdr->e_entry;
-}
-
-void *elf_load_file(void *file)
+static u32 elf_load_file(void *file)
 {
     Elf32_Ehdr *hdr = (Elf32_Ehdr *)file;
     if (!elf_check_supported(hdr))
     {
-        printf("ELF File cannot be loaded.\n");
-        return NULL;
-    }
-
-    switch (hdr->e_type)
-    {
-    case ET_EXEC:
-        // TODO : Implement
-        return NULL;
-    case ET_REL:
-        return elf_load_rel(hdr);
-    }
-    return NULL;
-}
-
-static inline Elf32_Shdr *elf_sheader(Elf32_Ehdr *hdr)
-{
-    return (Elf32_Shdr *)((int)hdr + hdr->e_shoff);
-}
-
-static inline Elf32_Shdr *elf_section(Elf32_Ehdr *hdr, int idx)
-{
-    return &elf_sheader(hdr)[idx];
-}
-
-static inline char *elf_str_table(Elf32_Ehdr *hdr)
-{
-    if (hdr->e_shstrndx == SHN_UNDEF)
-        return NULL;
-    return (char *)hdr + elf_section(hdr, hdr->e_shstrndx)->sh_offset;
-}
-
-static inline char *elf_lookup_string(Elf32_Ehdr *hdr, int offset)
-{
-    char *strtab = elf_str_table(hdr);
-    if (!strtab)
-        return NULL;
-    return strtab + offset;
-}
-
-static int elf_get_symval(Elf32_Ehdr *hdr, int table, unsigned int idx)
-{
-    if (table == SHN_UNDEF || idx == SHN_UNDEF)
-        return 0;
-    Elf32_Shdr *symtab = elf_section(hdr, table);
-
-    u32 symtab_entries = symtab->sh_size / symtab->sh_entsize;
-    if (idx >= symtab_entries)
-    {
-        printf("Symbol Index out of Range (%d:%u).\n", table, idx);
+        printf("[i] ELF File cannot be loaded\r\n");
         return -1;
     }
 
-    int symaddr = (int)hdr + symtab->sh_offset;
-    Elf32_Sym *symbol = &((Elf32_Sym *)symaddr)[idx];
-
-    if (symbol->st_shndx == SHN_UNDEF)
+    if (hdr->e_type == ET_EXEC)
     {
-        // External symbol, lookup value
-        Elf32_Shdr *strtab = elf_section(hdr, symtab->sh_link);
-        const char *name =
-            (const char *)hdr + strtab->sh_offset + symbol->st_name;
+        // Get the program header table
+        Elf32_Phdr *phdr = (Elf32_Phdr *)(file + hdr->e_phoff);
 
-        extern void *elf_lookup_symbol(const char *name);
-        void *target = elf_lookup_symbol(name);
-
-        if (target == NULL)
+        // Iterate over each segment
+        for (int i = 0; i < hdr->e_phnum; i++)
         {
-            // Extern symbol not found
-            if (ELF32_ST_BIND(symbol->st_info) & STB_WEAK)
+            // Skip non-loadable segments
+            if (phdr[i].p_type != PT_LOAD)
             {
-                // Weak symbol initialized as 0
-                return 0;
-            }
-            else
-            {
-                printf("Undefined External Symbol : %s.\n", name);
-                return -1;
-            }
-        }
-        else
-        {
-            return (int)target;
-        }
-    }
-    else if (symbol->st_shndx == SHN_ABS)
-    {
-        // Absolute symbol
-        return symbol->st_value;
-    }
-    else
-    {
-        // Internally defined symbol
-        Elf32_Shdr *target = elf_section(hdr, symbol->st_shndx);
-        return (int)hdr + symbol->st_value + target->sh_offset;
-    }
-}
-
-int elf_load_stage1(Elf32_Ehdr *hdr)
-{
-    Elf32_Shdr *shdr = elf_sheader(hdr);
-
-    unsigned int i;
-    // Iterate over section headers
-    for (i = 0; i < hdr->e_shnum; i++)
-    {
-        Elf32_Shdr *section = &shdr[i];
-
-        // If the section isn't present in the file
-        if (section->sh_type == SHT_NOBITS)
-        {
-            // Skip if it the section is empty
-            if (!section->sh_size)
                 continue;
-            // If the section should appear in memory
-            if (section->sh_flags & SHF_ALLOC)
-            {
-                // Allocate and zero some memory
-                void *mem = malloc(section->sh_size);
-                memset(mem, 0, section->sh_size);
-
-                // Assign the memory offset to the section offset
-                section->sh_offset = (int)mem - (int)hdr;
-                printf("Allocated memory for a section (%ld).\n",
-                       section->sh_size);
             }
+
+            // Target virtual address and source data in the file
+            u8 *dst = (u8 *)phdr[i].p_vaddr;
+            u8 *src = (u8 *)file + phdr[i].p_offset;
+
+            // Copy p_filesz bytes from the file into memory at p_vaddr
+            memcpy(dst, src, phdr[i].p_filesz);
+
+            // Zero out the remaining bytes
+            // BSS region: p_memsz - p_filesz
+            memset(dst + phdr[i].p_filesz, 0,
+                   phdr[i].p_memsz - phdr[i].p_filesz);
         }
+
+        // Return the entry point
+        return hdr->e_entry;
     }
-    return 0;
+    return -1;
 }
 
-int elf_load_stage2(Elf32_Ehdr *hdr)
+// Enter user mode with iret method
+// from https://wiki.osdev.org/Getting_to_Ring_3#iret_method
+static void jump_usermode(u32 entry, u32 user_esp)
 {
-    Elf32_Shdr *shdr = elf_sheader(hdr);
+    printf("[i] Jumping to usermode: entry=0x%x esp=0x%x\r\n", entry, user_esp);
 
-    unsigned int i, idx;
-    // Iterate over section headers
-    for (i = 0; i < hdr->e_shnum; i++)
-    {
-        Elf32_Shdr *section = &shdr[i];
+    // set data segment registers to user data (GDT[4] | RPL3 = 0x23)
+    __asm__ volatile("mov $0x23, %ax\n");
+    __asm__ volatile("mov %ax, %ds\n");
+    __asm__ volatile("mov %ax, %es\n");
+    __asm__ volatile("mov %ax, %fs\n");
+    __asm__ volatile("mov %ax, %gs\n");
 
-        // If this is a relocation section
-        if (section->sh_type == SHT_REL)
-        {
-            // Process each entry in the table
-            for (idx = 0; idx < section->sh_size / section->sh_entsize; idx++)
-            {
-                Elf32_Rel *reltab =
-                    &((Elf32_Rel *)((int)hdr + section->sh_offset))[idx];
-                int result = elf_do_reloc(hdr, reltab, section);
-                // On error, display a message and return
-                if (result == -1)
-                {
-                    printf("Failed to relocate symbol.\n");
-                    return -1;
-                }
-            }
-        }
-    }
-    return 0;
+    // Build iret frame
+    __asm__ volatile("pushl $0x23\n"); // ss
+    __asm__ volatile("push %0\n" ::"r"(user_esp)); // esp
+    __asm__ volatile("pushfl\n");
+    __asm__ volatile("pushl $0x1B\n"); // cs (GDT[3] | RPL3)
+    __asm__ volatile("pushl %0\n" ::"r"(entry)); // eip
+    __asm__ volatile("iret\n");
 }
 
-int elf_do_reloc(Elf32_Ehdr *hdr, Elf32_Rel *rel, Elf32_Shdr *reltab)
+void init_elf(multiboot_info_t *info)
 {
-    Elf32_Shdr *target = elf_section(hdr, reltab->sh_info);
-
-    int addr = (int)hdr + target->sh_offset;
-    int *ref = (int *)(addr + rel->r_offset);
-
-    // Symbol value
-    int symval = 0;
-    if (ELF32_R_SYM(rel->r_info) != SHN_UNDEF)
+    // Allocate a heap
+    u8 *user_heap = memory_reserve(USER_HEAP_SIZE);
+    if (!user_heap)
     {
-        symval = elf_get_symval(hdr, reltab->sh_link, ELF32_R_SYM(rel->r_info));
-        if (symval == -1)
-            return -1;
+        printf("[i] Cannot allocate user heap\r\n");
+        return;
     }
 
-    // Relocate based on type
-    switch (ELF32_R_TYPE(rel->r_info))
+    u8 *user_heap_top = user_heap + USER_HEAP_SIZE;
+    init_sbrk(user_heap, user_heap_top);
+    printf("[i] User heap: %p -> %p\r\n", user_heap, user_heap_top);
+
+    // Open the ROM selected
+    int fd = open((char *)info->cmdline, O_RDONLY);
+    if (fd < 0)
     {
-    case R_386_NONE:
-        // No relocation
-        break;
-    case R_386_32:
-        // Symbol + Offset
-        *ref = symval + *ref;
-        break;
-    case R_386_PC32:
-        // Symbol + Offset - Section Offset
-        *ref = symval + *ref - (int)ref;
-        break;
-    default:
-        // Relocation type not supported, display error and return
-        printf("Unsupported Relocation Type (%d).\n",
-               ELF32_R_TYPE(rel->r_info));
-        return -1;
+        printf("[i] Cannot open %s\r\n", (char *)info->cmdline);
+        return;
     }
-    return symval;
-}
 
-// mem is the location of the elf header
-void *load_segment_to_memory(void *mem, Elf32_Phdr *phdr, int elf_fd)
-{
-    size_t mem_size = phdr->p_memsz;
-    off_t mem_offset = phdr->p_offset;
-    size_t file_size = phdr->p_filesz;
-    void *vaddr = (void *)(phdr->p_vaddr);
-    // mmap the memory region with the correct protections
-    int prot = 0;
-    if (phdr->p_flags & PF_R)
-        prot |= PROT_READ;
-    if (phdr->p_flags & PF_W)
-        prot |= PROT_WRITE;
-    if (phdr->p_flags & PF_X)
-        prot |= PROT_EXEC;
+    // Seek to end to get file size
+    off_t size = seek(fd, 0, SEEK_END);
+    seek(fd, 0, SEEK_SET);
 
-    off_t page_offset = (u32)vaddr % PAGE_SIZE;
-    void *aligned_vaddr = (void *)((u32)vaddr - page_offset);
-    size_t aligned_size = mem_size + page_offset;
-
-    mmap(aligned_vaddr, file_size + page_offset, prot,
-         MAP_PRIVATE | MAP_ANONYMOUS, elf_fd, mem_offset - page_offset);
-    // technically we can just have vaddr as the first argument as mmap will
-    // automatically truncate to the start of the page
-    if (mem_size > file_size)
+    // Allocate a buffer for the whole file
+    void *buf = memory_reserve(size);
+    if (!buf)
     {
-        void *page_break =
-            ((u32)vaddr + mem_offset + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-        memset((u32)vaddr + file_size, 0,
-               (u32)page_break - (u32)vaddr - file_size);
-        if (mem_size > page_break - (u32)vaddr)
-        {
-            mmap(page_break, mem_size - (page_break - (u32)vaddr), flags,
-                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            memset(page_break, 0, mem_size - (page_break - (u32)vaddr));
-        }
+        printf("[i] Cannot allocate %d bytes for the file buf\r\n", size);
+        close(fd);
+        return;
     }
+
+    // Read the entire ELF file into the buffer
+    ssize_t bytes_read = read(fd, buf, size);
+    close(fd);
+
+    if (bytes_read < (ssize_t)size)
+    {
+        printf("[i] Short read (%d/%d bytes)\r\n", bytes_read, size);
+        return;
+    }
+
+    // Load ELF segments
+    u32 entry = elf_load_file(buf);
+    if (!entry)
+    {
+        printf("[i] elf_load_file failed\r\n");
+        return;
+    }
+
+    // Allocate a user-mode stack
+    void *user_stack_base = memory_reserve(USER_STACK_SIZE);
+    if (!user_stack_base)
+    {
+        printf("[i] Cannot allocate user stack\r\n");
+        return;
+    }
+    u32 user_stack_top = (u32)user_stack_base + USER_STACK_SIZE;
+
+    // Switch to ring 3
+    jump_usermode(entry, user_stack_top);
 }

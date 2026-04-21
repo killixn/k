@@ -1,3 +1,5 @@
+// https://k.lre.epita.fr/assignments/vga_driver.html
+
 #include "vga.h"
 
 #include "k/kstd.h"
@@ -46,7 +48,7 @@ void swap_frontbuffer(const void *buffer)
 {
     char *fb = libvga_get_framebuffer();
 
-    // must be in graphic mode (0xA0000)
+    // Must be in graphic mode (0xA0000)
     if (fb != (char *)0xA0000)
     {
         return;

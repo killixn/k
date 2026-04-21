@@ -6,7 +6,6 @@
 int sys_unknown(struct regs *r);
 int sys_test(struct regs *r);
 
-int sys_test(struct regs *r);
 int sys_write(struct regs *r);
 int sys_sbrk(struct regs *r);
 int sys_getkey(struct regs *r);

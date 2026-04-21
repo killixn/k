@@ -1,3 +1,5 @@
+// https://k.lre.epita.fr/assignments/timer.html
+
 #include "timer.h"
 
 #include "io.h"

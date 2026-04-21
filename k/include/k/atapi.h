@@ -79,6 +79,7 @@
 // from diapo 11/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
 #define PACKET_COMMAND_COMPLETE 3
 
+// SCSI_packet struct
 struct SCSI_packet
 {
     u8 op_code;
@@ -98,6 +99,5 @@ struct SCSI_packet
 void discover_atapi_drive();
 void send_packet(struct SCSI_packet *pkt, u16 bus);
 void *read_block(size_t lba);
-void disk_pretty_print(void *block, int mode);
 
 #endif /* !ATAPI_H_ */

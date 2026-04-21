@@ -1,9 +1,12 @@
+// https://k.lre.epita.fr/assignments/file_system.html
+
 #include <k/atapi.h>
 #include <k/types.h>
 
-#include "../io.h"
+#include "io.h"
 #include "stdio.h"
 
+// Control register defines
 #define CONTROL 0x206
 #define ALTERNATE_STATUS 0
 
@@ -132,9 +135,10 @@ void send_packet(struct SCSI_packet *pkt, u16 bus)
     u16 *data = (u16 *)pkt;
     for (int i = 0; i < PACKET_SZ / 2; i++)
     {
-        printf("%.04X\r\n", data[i]);
+        printf("%.04X ", data[i]);
         outw(ATA_REG_DATA(bus), data[i]);
     }
+    printf("\r\n");
 
     // Wait until the drive is no longer signalling DATA_TRANSMIT
     // from diapo 10/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
@@ -155,7 +159,6 @@ void *read_block(size_t lba)
     pkt.transfer_length_lo = 1;
 
     send_packet(&pkt, cur_bus);
-    wait_packet_request(cur_bus);
 
     // Read CD_BLOCK_SZ bytes word by word
     // from diapo 11/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
@@ -173,50 +176,4 @@ void *read_block(size_t lba)
         ;
 
     return atapi_buffer;
-}
-
-/* Pretty print the bytes of a disk (comprehensive mode, mode 0 = just headers,
- * mode 1 = print data too) */
-void disk_pretty_print(void *block, int mode)
-{
-    size_t offset = 0;
-    size_t identifier_size = 5;
-    size_t data_size = 2041;
-    printf("[i] -------------------- Dumping disk --------------------\r\n");
-    printf("\t[i] Block address: %p\r\n", block);
-
-    u8 *ptr = (u8 *)block;
-    puts("[i] Block data:\r\n");
-
-    printf("\t[i] Descriptor type code: 0x%.02X\r\n", ptr[offset++]);
-    printf("\t[i] Idenfifier bytes: ");
-    for (size_t i = 0; i < identifier_size; i++)
-    {
-        size_t idx = offset + i;
-        printf("0x%.02X ", (u8)(*(ptr + idx)));
-    }
-    offset += identifier_size;
-    printf("\r\n");
-
-    printf("[i] Volume descriptor version: %.02X\r\n", ptr[offset++]);
-    if (mode == 1) /* DEBUG mode */
-    {
-        printf("[i] Dumping data ...\t\n");
-        for (size_t i = 0; i < data_size; i++)
-        {
-            size_t idx = offset + i;
-            u8 byte = (u8)(*(ptr + idx));
-            if (i > 0 && i % 10 == 0)
-            {
-                printf("0x%.02X\r\n", byte);
-                continue;
-            }
-            printf("0x%.02X ", byte);
-        }
-        offset += data_size;
-    }
-
-    printf("Final offset: %d\r\n", offset);
-
-    puts("------------- End of disk ------------\r\n");
 }

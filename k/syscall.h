@@ -1,8 +1,6 @@
 #ifndef SYSCALL_H
 #define SYSCALL_H
 
-#include <k/kstd.h>
-
 #include "idt.h"
 
 typedef int (*syscall_t)(struct regs *r);

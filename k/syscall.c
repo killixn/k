@@ -1,12 +1,13 @@
+// https://k.lre.epita.fr/assignments/syscalls.html
+
 #include "syscall.h"
 
 #include <k/kstd.h>
 
-#include "stdio.h"
 #include "syscall_wrapper.h"
 
 #define SYSCALL_TEST 0
-#define MAX_SYSCALLS 256
+#define MAX_SYSCALLS 32
 
 static syscall_t syscall_table[MAX_SYSCALLS];
 
@@ -31,8 +32,7 @@ void syscall_handler(struct regs *r)
     // set to eax
     r->eax = ret;
 
-    // print the syscall identifier when executing int 0x80
-    printf("syscall %u called (arg1=%u)\n", r->eax, r->ebx);
+    // printf("syscall %u called (arg1=%u), ret=%d\n", syscall_id, r->ebx, ret);
 }
 
 void init_syscall()
@@ -44,7 +44,6 @@ void init_syscall()
     }
 
     // fill the syscall dispatch table with the developed syscalls
-    register_syscall(SYSCALL_TEST, sys_test);
     register_syscall(SYSCALL_WRITE, sys_write);
     register_syscall(SYSCALL_SBRK, sys_sbrk);
     register_syscall(SYSCALL_GETKEY, sys_getkey);

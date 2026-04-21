@@ -4,145 +4,201 @@
 #include <k/iso9660.h>
 #include <k/kstd.h>
 
+#include "stdio.h"
+#include "string.h"
+
 #define MAX_FD 16
 
-static file_descriptor_t fd_table[MAX_FD];
+static fd_entry_t fd_table[MAX_FD];
 
-// Compare an ISO9660 filename (e.g. "FOO.TXT;1") with a plain name ("foo.txt")
-// (ISO9660 names are uppercase and may have a ";1" version suffix)
-// from http://wiki.osdev.org/ISO_9660#Locating_Data_on_the_CD
-static int iso_name_match(const char *iso_name, u8 iso_len, const char *name)
+static u8 cache_buf[ISO_BLOCK_SIZE];
+static u32 cache_lba = (u32)-1;
+
+static char *fs_strchr(const char *s, int c)
 {
-    // Make a clean copy of the ISO name (without the ";1" version suffix)
-    char clean[256];
-    int len = 0;
-
-    for (int i = 0; i < iso_len; i++)
+    for (; *s; s++)
     {
-        if (iso_name[i] == ';')
+        if ((unsigned char)*s == (unsigned char)c)
         {
-            break;
+            return (char *)s;
         }
-        // Case-insensitive: lowercase the ISO name character
-        clean[len++] = (iso_name[i] >= 'A' && iso_name[i] <= 'Z')
-            ? iso_name[i] + 32
-            : iso_name[i];
-    }
-    clean[len] = '\0';
-
-    // Compare with the requested name (also lowercased)
-    for (int i = 0; i <= len; i++)
-    {
-        char c = name[i];
-        if (c >= 'A' && c <= 'Z')
-        {
-            c += 32;
-        }
-        if (clean[i] != c)
-        {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-// Walk one directory block looking for a given name
-// from http://wiki.osdev.org/ISO_9660#Locating_Data_on_the_CD
-static struct iso_dir *find_in_dir(u8 *block, size_t block_size,
-                                   const char *name)
-{
-    size_t pos = 0;
-
-    while (pos < block_size)
-    {
-        struct iso_dir *entry = (struct iso_dir *)(block + pos);
-
-        // If end of sector reached
-        if (entry->dir_size == 0)
-        {
-            break;
-        }
-
-        // Skip special entries "." and ".."
-        if (entry->idf_len > 0 && entry->idf[0] != 0x00
-            && entry->idf[0] != 0x01)
-        {
-            if (iso_name_match(entry->idf, entry->idf_len, name))
-            {
-                return entry;
-            }
-        }
-
-        pos += entry->dir_size;
     }
     return NULL;
 }
 
-// Lookup a file by absolute path (e.g. "/boot/stage2.bin")
-// from http://wiki.osdev.org/ISO_9660#Locating_Data_on_the_CD
-static int iso9660_lookup(const char *pathname, size_t *out_lba,
-                          size_t *out_size)
+static const u8 *get_block(u32 lba)
 {
-    // Read the Primary Volume Descriptor (always at LBA 16)
-    u8 *pvd_block = read_block(ISO_PRIM_VOLDESC_BLOCK);
-    struct iso_prim_voldesc *pvd = (struct iso_prim_voldesc *)pvd_block;
+    if (lba != cache_lba)
+    {
+        // atapi driver
+        const u8 *p = (const u8 *)read_block(lba);
+        memcpy(cache_buf, p, ISO_BLOCK_SIZE);
+        cache_lba = lba;
+    }
 
-    // Start from the root directory entry embedded in the PVD
-    size_t dir_lba = pvd->root_dir.data_blk.le;
-    size_t dir_size = pvd->root_dir.file_size.le;
+    return cache_buf;
+}
 
-    // Walk each path component
-    // e.g. "/boot/stage2.bin" -> ["boot", "stage2.bin"]
-    const char *p = pathname;
+static int alloc_fd(void)
+{
+    // 0,1,2 reserved for stdin/stdout/stderr
+    for (int i = 3; i < MAX_FD; i++)
+    {
+        if (!fd_table[i].used)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+// Compare an ISO directory identifier against a plain C string
+static int iso_namecmp(const char *idf, u8 idf_len, const char *name)
+{
+    /* strip ";1" version suffix if present */
+    u8 len = idf_len;
+    if (len >= 2 && idf[len - 2] == ';')
+        len -= 2;
+
+    /* strip trailing dot (empty extension) */
+    if (len > 0 && idf[len - 1] == '.')
+        len--;
+
+    if (strlen(name) != len)
+        return 1;
+
+    return strncasecmp(idf, name, len);
+}
+
+// Walk all directory records inside a directory whose first data block is at
+// dir_lba and whose total size is dir_size bytes
+static struct iso_dir *find_in_dir(u32 dir_lba, u32 dir_size, const char *name)
+{
+    u32 bytes_left = dir_size;
+    u32 lba = dir_lba;
+
+    while (bytes_left > 0)
+    {
+        const u8 *block = get_block(lba);
+        u32 off = 0;
+
+        while (off < ISO_BLOCK_SIZE && off < bytes_left)
+        {
+            struct iso_dir *d = (struct iso_dir *)(block + off);
+
+            // rest is padding
+            if (d->dir_size == 0)
+            {
+                break;
+            }
+
+            // skip "." and ".."
+            if (d->idf_len == 1 && ((u8)d->idf[0] <= 1))
+            {
+                off += d->dir_size;
+                continue;
+            }
+
+            if (iso_namecmp(d->idf, d->idf_len, name) == 0)
+                return d;
+
+            off += d->dir_size;
+        }
+
+        bytes_left -=
+            (bytes_left > ISO_BLOCK_SIZE ? ISO_BLOCK_SIZE : bytes_left);
+        lba++;
+    }
+    return NULL;
+}
+
+// Resolve a full absolute path starting from the root directory described in
+// the primary volume descriptor
+static int resolve_path(const char *pathname, u32 *out_lba, u32 *out_size)
+{
+    // read Primary Volume Descriptor (block 16)
+    const u8 *pvd_block = get_block(ISO_PRIM_VOLDESC_BLOCK);
+    const struct iso_prim_voldesc *pvd =
+        (const struct iso_prim_voldesc *)pvd_block;
+
+    if (pvd->vol_desc_type != 1)
+    {
+        puts("[!] fs: not a valid ISO9660 PVD\r\n");
+        return -1;
+    }
+
+    // start walking from the root directory
+    u32 dir_lba = pvd->root_dir.data_blk.le;
+    u32 dir_size = pvd->root_dir.file_size.le;
+
+    // need a local copy of the PVD's root dir entry
+    struct iso_dir root_copy;
+    memcpy(&root_copy, &pvd->root_dir, sizeof(root_copy));
+    dir_lba = root_copy.data_blk.le;
+    dir_size = root_copy.file_size.le;
+
+    // tokenise the path on "/"
+    char path_buf[256];
+    strncpy(path_buf, pathname, sizeof(path_buf) - 1);
+    path_buf[sizeof(path_buf) - 1] = '\0';
+
+    char *p = path_buf;
+
+    // skip leading "/"
     while (*p == '/')
     {
-        // Skip leading slash
         p++;
     }
 
     while (*p)
     {
-        // Extract the next path component into a local buffer
-        char component[256];
-        int clen = 0;
-        while (*p && *p != '/')
+        // extract next component
+        char *slash = fs_strchr(p, '/');
+        if (slash)
         {
-            component[clen++] = *p++;
-        }
-        component[clen] = '\0';
-        if (*p == '/')
-        {
-            // Skip the separator
-            p++;
+            *slash = '\0';
         }
 
-        // Load the current directory block + search for the component
-        struct iso_dir *found = NULL;
-        size_t bytes_scanned = 0;
-
-        while (bytes_scanned < dir_size)
+        // find this component in the current directory
+        struct iso_dir *entry = find_in_dir(dir_lba, dir_size, p);
+        if (!entry)
         {
-            u8 *block = read_block(dir_lba + bytes_scanned / ISO_BLOCK_SIZE);
-            found = find_in_dir(block, ISO_BLOCK_SIZE, component);
-            if (found)
-            {
-                break;
-            }
-            bytes_scanned += ISO_BLOCK_SIZE;
-        }
-
-        if (!found)
-        {
-            // Component not found
+            printf("[!] fs: component '%s' not found\r\n", p);
             return -1;
         }
 
-        // Move into the found entry (directory or final file)
-        dir_lba = found->data_blk.le;
-        dir_size = found->file_size.le;
+        // copy entry to avoid it being clobbered by next get_block
+        struct iso_dir entry_copy;
+        memcpy(&entry_copy, entry, sizeof(entry_copy));
+
+        dir_lba = entry_copy.data_blk.le;
+        dir_size = entry_copy.file_size.le;
+
+        if (!slash)
+        {
+            // last component, the file we want
+            *out_lba = dir_lba;
+            *out_size = dir_size;
+            return 0;
+        }
+
+        // intermediate component must be a directory
+        if (!(entry_copy.type & ISO_FILE_ISDIR))
+        {
+            puts("[!] fs: path component is not a directory\r\n");
+            return -1;
+        }
+
+        p = slash + 1;
+        while (*p == '/')
+        {
+            p++;
+        }
     }
 
-    // Full path consumed -> dir_lba/dir_size now point to the file
+    // pathname was e.g. "/"
+    // return root dir itself
     *out_lba = dir_lba;
     *out_size = dir_size;
     return 0;
@@ -164,45 +220,43 @@ NOTES
 */
 int open(const char *pathname, int flags)
 {
-    if (!pathname || flags != O_RDONLY)
+    if (!pathname)
     {
         return -1;
     }
 
-    // Find a free slot in the descriptor table
-    // from 28/30 https://k.lre.epita.fr/data/slides/kern-4.pdf
-    int fd = -1;
-    for (int i = 0; i < MAX_FD; i++)
+    if (flags != O_RDONLY)
     {
-        if (!fd_table[i].used)
-        {
-            // Register an fd in fd_table
-            fd = i;
-            break;
-        }
-    }
-    // No free slots available
-    if (fd == -1)
-    {
+        puts("[!] fs: open() only supports O_RDONLY\r\n");
         return -1;
     }
 
     // Parse ISO 9660 to locate the file
-    // from 28/30 https://k.lre.epita.fr/data/slides/kern-4.pdf
-    size_t lba;
-    size_t size;
-    if (iso9660_lookup(pathname, &lba, &size) < 0)
+    // from 17/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
+    u32 lba;
+    u32 size;
+    if (resolve_path(pathname, &lba, &size) != 0)
     {
-        // File not found
+        printf("[i] File \"%s\" not found\r\n", pathname);
         return -1;
     }
 
-    // Fill in the descriptor
+    // Find a free slot in the descriptor table
+    // from 17/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
+    int fd = alloc_fd();
+    if (fd < 0)
+    {
+        puts("[!] fs: no free file descriptors\r\n");
+        return -1;
+    }
+
     fd_table[fd].used = 1;
     fd_table[fd].lba = lba;
     fd_table[fd].size = size;
-    fd_table[fd].offset = 0;
+    fd_table[fd].cursor = 0;
 
+    printf("[i] fs: open('%s') -> fd %d  (lba=%u size=%u)\r\n", pathname, fd,
+           lba, size);
     return fd;
 }
 
@@ -217,57 +271,47 @@ RETURN VALUE
 */
 ssize_t read(int fd, void *buf, size_t count)
 {
-    if (fd < 0 || fd >= MAX_FD || !fd_table[fd].used)
+    if (fd < 0 || fd >= MAX_FD || !fd_table[fd].used || !buf)
     {
         return -1;
     }
 
-    file_descriptor_t *f = &fd_table[fd];
+    fd_entry_t *f = &fd_table[fd];
 
-    // Count to the remaining bytes in the file
-    if ((size_t)f->offset >= f->size)
+    // Clamp to what's left in the file
+    if (f->cursor >= f->size)
     {
-        // EOF
         return 0;
     }
-    // Adjust the offset if necessary
-    if (f->offset + count > f->size)
+
+    size_t available = f->size - f->cursor;
+    if (count > available)
     {
-        count = f->size - f->offset;
+        count = available;
     }
 
-    size_t bytes_read = 0;
+    size_t remaining = count;
     u8 *dst = (u8 *)buf;
 
-    while (bytes_read < count)
+    while (remaining > 0)
     {
-        // Determine which block to read
-        // Determine where to start
-        size_t block_index = (f->offset + bytes_read) / CD_BLOCK_SZ;
-        size_t block_offset = (f->offset + bytes_read) % CD_BLOCK_SZ;
-
-        u8 *block = read_block(f->lba + block_index);
-        if (!block)
-            return bytes_read > 0 ? (ssize_t)bytes_read : -1;
-
-        // Find how many available bytes remain in this block
-        size_t available = CD_BLOCK_SZ - block_offset;
-        size_t to_copy = count - bytes_read;
-        if (to_copy > available)
+        u32 lba = f->lba + (f->cursor / ISO_BLOCK_SIZE);
+        u32 block_off = f->cursor % ISO_BLOCK_SIZE;
+        u32 chunk = ISO_BLOCK_SIZE - block_off;
+        if (chunk > remaining)
         {
-            to_copy = available;
+            chunk = remaining;
         }
 
-        for (size_t i = 0; i < to_copy; i++)
-        {
-            dst[bytes_read + i] = block[block_offset + i];
-        }
+        const u8 *block = get_block(lba);
+        memcpy(dst, block + block_off, chunk);
 
-        bytes_read += to_copy;
+        dst += chunk;
+        f->cursor += chunk;
+        remaining -= chunk;
     }
 
-    f->offset += bytes_read;
-    return (ssize_t)bytes_read;
+    return (ssize_t)count;
 }
 
 /*
@@ -285,42 +329,42 @@ off_t seek(int fd, off_t offset, int whence)
 {
     if (fd < 0 || fd >= MAX_FD || !fd_table[fd].used)
     {
-        return -1;
+        return (off_t)-1;
     }
 
-    file_descriptor_t *f = &fd_table[fd];
-    off_t new_offset;
+    fd_entry_t *f = &fd_table[fd];
+    off_t new_cursor;
 
     // Modify the file offset according to whence
     // from https://k.lre.epita.fr/assignments/file_system.html
-    // from 29/30 https://k.lre.epita.fr/data/slides/kern-4.pdf
+    // from 18/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
     switch (whence)
     {
     // Cursor is set to offset bytes
     case SEEK_SET:
-        new_offset = offset;
+        new_cursor = offset;
         break;
     // Cursor is set to its current location plus offset bytes
     case SEEK_CUR:
-        new_offset = f->offset + offset;
+        new_cursor = (off_t)f->cursor + offset;
         break;
     // Cursor is set to the size of the file plus offset bytes
     case SEEK_END:
-        new_offset = f->size + offset;
+        new_cursor = (off_t)f->size + offset;
         break;
     default:
         // Unknown whence
-        return -1;
+        return (off_t)-1;
     }
 
     // Ensure the new offset stays within valid bounds
-    if (new_offset < 0 || (size_t)new_offset > f->size)
+    if (new_cursor < 0)
     {
-        return -1;
+        return (off_t)-1;
     }
 
-    f->offset = new_offset;
-    return new_offset;
+    f->cursor = (u32)new_cursor;
+    return new_cursor;
 }
 
 /*
@@ -340,11 +384,8 @@ int close(int fd)
     }
 
     // Free the fd
-    // from 28/30 https://k.lre.epita.fr/data/slides/kern-4.pdf
+    // from 17/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
     fd_table[fd].used = 0;
-    fd_table[fd].lba = 0;
-    fd_table[fd].size = 0;
-    fd_table[fd].offset = 0;
 
     return 0;
 }

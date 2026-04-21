@@ -1,3 +1,5 @@
+// https://k.lre.epita.fr/assignments/keyboard.html
+
 #include "keyboard.h"
 
 #include <k/kstd.h>
@@ -25,7 +27,9 @@ static int fifo_push(struct key_fifo *f, struct key_event ev)
     unsigned int next = (f->head + 1) % FIFO_SIZE;
 
     if (next == f->tail)
+    {
         return -1;
+    }
 
     f->buffer[f->head] = ev;
     f->head = next;
@@ -37,7 +41,9 @@ static int fifo_push(struct key_fifo *f, struct key_event ev)
 static int fifo_pop(struct key_fifo *f, struct key_event *ev)
 {
     if (f->head == f->tail)
+    {
         return -1;
+    }
 
     *ev = f->buffer[f->tail];
     f->tail = (f->tail + 1) % FIFO_SIZE;
@@ -63,7 +69,9 @@ ERRORS
 int readkey(struct key_event *event)
 {
     if (fifo_pop(&keyboard_fifo, event) < 0)
+    {
         return -EAGAIN;
+    }
 
     return 0;
 }

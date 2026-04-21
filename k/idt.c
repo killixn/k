@@ -1,3 +1,5 @@
+// https://k.lre.epita.fr/assignments/events.html
+
 #include "idt.h"
 
 #include <k/kstd.h>
@@ -43,70 +45,70 @@ void irq_handler(struct regs *r)
     switch (r->vector)
     {
     case 0:
-        printf("Divide by 0\r\n");
+        printf("[i] IRQ Handler: Divide by 0\r\n");
         break;
     case 1:
-        printf("Debug\r\n");
+        printf("[i] IRQ Handler: Debug\r\n");
         break;
     case 2:
-        printf("NMI\r\n");
+        printf("[i] IRQ Handler: NMI\r\n");
         break;
     case 3:
-        printf("Breakpoint\r\n");
+        printf("[i] IRQ Handler: Breakpoint\r\n");
         break;
     case 4:
-        printf("Overflow\r\n");
+        printf("[i] IRQ Handler: Overflow\r\n");
         break;
     case 5:
-        printf("Bound Range Exceeded\r\n");
+        printf("[i] IRQ Handler: Bound Range Exceeded\r\n");
         break;
     case 6:
-        printf("Invalid Opcode\r\n");
+        printf("[i] IRQ Handler: Invalid Opcode\r\n");
         break;
     case 7:
-        printf("Device Not Available\r\n");
+        printf("[i] IRQ Handler: Device Not Available\r\n");
         break;
     case 8:
-        printf("Double Fault\r\n");
+        printf("[i] IRQ Handler: Double Fault\r\n");
         break;
     case 9:
-        printf("Coprocessor\r\n");
+        printf("[i] IRQ Handler: Coprocessor\r\n");
         break;
     case 10:
-        printf("Invalid TSS\r\n");
+        printf("[i] IRQ Handler: Invalid TSS\r\n");
         break;
     case 11:
-        printf("Segment not present\r\n");
+        printf("[i] IRQ Handler: Segment not present\r\n");
         break;
     case 12:
-        printf("Stack Segment Fault\r\n");
+        printf("[i] IRQ Handler: Stack Segment Fault\r\n");
         break;
     case 13:
-        printf("General Protection\r\n");
+        printf("[i] IRQ Handler: General Protection\r\n");
         break;
     case 14:
-        printf("Page Fault\r\n");
+        printf("[i] IRQ Handler: Page Fault\r\n");
         break;
     case 15:
-        printf("(Intel reserved)\r\n");
+        printf("[i] IRQ Handler: (Intel reserved)\r\n");
         break;
     case 16:
-        printf("x87 FPU (Math Fault)\r\n");
+        printf("[i] IRQ Handler: x87 FPU (Math Fault)\r\n");
         break;
     case 17:
-        printf("Alignement Check\r\n");
+        printf("[i] IRQ Handler: Alignement Check\r\n");
         break;
     case 18:
-        printf("Machine Check\r\n");
+        printf("[i] IRQ Handler: Machine Check\r\n");
         break;
     case 19:
-        printf("SMD FLoating Point Ex.\r\n");
+        printf("[i] IRQ Handler: SMD FLoating Point Ex.\r\n");
         break;
     case 20:
-        printf("Virtualization Ex.\r\n");
+        printf("[i] IRQ Handler: Virtualization Ex.\r\n");
         break;
     case 21:
-        printf("(Intel reserved)\r\n");
+        printf("[i] IRQ Handler: (Intel reserved)\r\n");
         break;
 
     // Typical wiring of the PIC (Master)
@@ -118,56 +120,58 @@ void irq_handler(struct regs *r)
         keyboard_irq_handler();
         break;
     case 34:
-        printf("Not assigned in PC/XT; cascaded to slave 8256\r\n");
+        printf("[i] IRQ Handler: Not assigned in PC/XT; cascaded to slave "
+               "8256\r\n");
         break;
     case 35:
-        printf("UART (COM2 and COM4)\r\n");
+        printf("[i] IRQ Handler: UART (COM2 and COM4)\r\n");
         break;
     case 36:
-        printf("UART (COM1 and COM3)\r\n");
+        printf("[i] IRQ Handler: UART (COM1 and COM3)\r\n");
         break;
     case 37:
-        printf("Hard disk in PC/XT; Parallel port LPT2 in PC/AT\r\n");
+        printf("[i] IRQ Handler: Hard disk in PC/XT; Parallel port LPT2 in "
+               "PC/AT\r\n");
         break;
     case 38:
-        printf("Floppy disk controller\r\n");
+        printf("[i] IRQ Handler: Floppy disk controller\r\n");
         break;
 
     // Typical wiring of the PIC (Slave)
     // from https://k.lre.epita.fr/data/slides/kern-3.pdf
     case 39:
-        printf("Parallel port LPT1\r\n");
+        printf("[i] IRQ Handler: Parallel port LPT1\r\n");
         break;
     case 40:
-        printf("RTC\r\n");
+        printf("[i] IRQ Handler: RTC\r\n");
         break;
     case 41:
-        printf("IRQ9\r\n");
+        printf("[i] IRQ Handler: IRQ9\r\n");
         break;
     case 42:
-        printf("IRQ10\r\n");
+        printf("[i] IRQ Handler: IRQ10\r\n");
         break;
     case 43:
-        printf("IRQ11\r\n");
+        printf("[i] IRQ Handler: IRQ11\r\n");
         break;
     case 44:
-        printf("PS/2 mouse controller\r\n");
+        printf("[i] IRQ Handler: PS/2 mouse controller\r\n");
         break;
     case 45:
-        printf("Math coprocessor\r\n");
+        printf("[i] IRQ Handler: Math coprocessor\r\n");
         break;
     case 46:
-        printf("Hard disk controller 1\r\n");
+        printf("[i] IRQ Handler: Hard disk controller 1\r\n");
         break;
     case 47:
-        printf("Hard disk controller 2\r\n");
+        printf("[i] IRQ Handler: Hard disk controller 2\r\n");
         break;
     case 128:
-        // printf("Syscall intercepted\r\n");
+        // printf("[i] IRQ Handler: Syscall intercepted\r\n");
         syscall_handler(r);
         break;
     default:
-        printf("Unhandled interrupt: %d\r\n", r->vector);
+        printf("[i] IRQ Handler: Unhandled interrupt: %d\r\n", r->vector);
         break;
     }
 
