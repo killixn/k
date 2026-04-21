@@ -76,6 +76,24 @@ int readkey(struct key_event *event)
     return 0;
 }
 
+/*
+DESCRIPTION
+    getkey() blocks until a key press event is available and returns it.
+RETURN VALUE
+    getkey() returns the key code of the pressed key.
+*/
+int getkey(void)
+{
+    struct key_event event;
+
+    // Block until a KEY_PRESSED event is available
+    while (1)
+    {
+        if (readkey(&event) == 0 && event.state == KEY_PRESSED)
+            return event.key;
+    }
+}
+
 void keyboard_irq_handler()
 {
     // Read scancodes from I/O port 0x60

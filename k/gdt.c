@@ -44,7 +44,7 @@ static void load_tss(u32 stack_top)
 {
     // Compute the base and limit of the TSS for use in the GDT entry
     u32 base = (u32)&tss_entry;
-    u32 limit = sizeof(tss_entry_t);
+    u32 limit = sizeof(tss_entry_t) - 1;
 
     // Add a TSS descriptor to the GDT.
     // https://wiki.osdev.org/GDT_Tutorial#Flat_/_Long_Mode_Setup

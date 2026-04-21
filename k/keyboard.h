@@ -32,6 +32,7 @@ struct key_fifo
 
 void init_keyboard();
 int readkey(struct key_event *event);
+int getkey(void);
 void keyboard_irq_handler();
 
 #endif /* KEYBOARD_H */

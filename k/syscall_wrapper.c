@@ -35,7 +35,7 @@ int sys_sbrk(struct regs *r)
 int sys_getkey(struct regs *r)
 {
     (void)r;
-    return 0;
+    return getkey();
 }
 
 // from timer.c

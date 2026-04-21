@@ -20,7 +20,7 @@ static void busy_wait(u8 reg)
     {
         u8 status = inb(ATA_REG_STATUS(reg));
         if (!(status & BSY))
-            break;
+            return;
         if (status & ERR || status & DF)
             return;
     }
@@ -30,14 +30,17 @@ static void busy_wait(u8 reg)
 // from diapo 10/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
 static void wait_packet_request(u16 bus)
 {
-    while (1)
+    for (int i = 0; i < 100000; i++)
     {
         u8 status = inb(ATA_REG_STATUS(bus));
-        if (status & ERR || status & DF)
+        if (status & (ERR | DF))
             return;
         if (!(status & BSY) && (status & DRQ))
-            break;
+            return;
     }
+    printf("[!] atapi: wait_packet timeout status=0x%02X\r\n",
+           inb(ATA_REG_STATUS(bus)));
+    return;
 }
 
 // Wait 400 ns -> approx. 4 * inb()
@@ -128,6 +131,8 @@ void send_packet(struct SCSI_packet *pkt, u16 bus)
     // Issue PACKET command
     outb(ATA_REG_COMMAND(bus), PACKET);
 
+    ata_io_wait(bus);
+
     wait_packet_request(bus);
 
     // Write the 12-byte SCSI packet as 6 words to the Data Register
@@ -135,14 +140,8 @@ void send_packet(struct SCSI_packet *pkt, u16 bus)
     u16 *data = (u16 *)pkt;
     for (int i = 0; i < PACKET_SZ / 2; i++)
     {
-        printf("%.04X ", data[i]);
         outw(ATA_REG_DATA(bus), data[i]);
     }
-    printf("\r\n");
-
-    // Wait until the drive is no longer signalling DATA_TRANSMIT
-    // from diapo 10/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
-    wait_packet_request(bus);
 }
 
 void *read_block(size_t lba)
@@ -160,6 +159,10 @@ void *read_block(size_t lba)
 
     send_packet(&pkt, cur_bus);
 
+    // Wait until the drive is no longer signalling DATA_TRANSMIT
+    // from diapo 10/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
+    wait_packet_request(cur_bus);
+
     // Read CD_BLOCK_SZ bytes word by word
     // from diapo 11/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
     for (int i = 0; i < CD_BLOCK_SZ; i += 2)
@@ -171,9 +174,7 @@ void *read_block(size_t lba)
 
     // Wait for PACKET_COMMAND_COMPLETE
     // from diapo 11/19 https://k.lre.epita.fr/data/slides/kern-4.pdf
-    while ((inb(ATA_REG_SECTOR_COUNT(cur_bus)) & 0x3)
-           != PACKET_COMMAND_COMPLETE)
-        ;
+    busy_wait(cur_bus);
 
     return atapi_buffer;
 }

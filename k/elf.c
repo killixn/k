@@ -8,9 +8,6 @@
 #include "sbrk.h"
 #include "stdio.h"
 
-#define SEG_UDATA 0x23
-#define SEG_UCODE 0x1B
-
 #define USER_STACK_SIZE 0x4000
 #define USER_HEAP_SIZE 0x800000
 
@@ -167,6 +164,12 @@ void init_elf(multiboot_info_t *info)
 
     // Seek to end to get file size
     off_t size = seek(fd, 0, SEEK_END);
+    if (size == (off_t)-1)
+    {
+        printf("[i] Cannot seek in %s\r\n", (char *)info->cmdline);
+        close(fd);
+        return;
+    }
     seek(fd, 0, SEEK_SET);
 
     // Allocate a buffer for the whole file
@@ -190,7 +193,7 @@ void init_elf(multiboot_info_t *info)
 
     // Load ELF segments
     u32 entry = elf_load_file(buf);
-    if (!entry)
+    if (entry == (u32)-1)
     {
         printf("[i] elf_load_file failed\r\n");
         return;

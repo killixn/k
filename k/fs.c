@@ -56,12 +56,12 @@ static int alloc_fd(void)
 // Compare an ISO directory identifier against a plain C string
 static int iso_namecmp(const char *idf, u8 idf_len, const char *name)
 {
-    /* strip ";1" version suffix if present */
+    // strip ";1" version suffix if present
     u8 len = idf_len;
     if (len >= 2 && idf[len - 2] == ';')
         len -= 2;
 
-    /* strip trailing dot (empty extension) */
+    // strip trailing dot (empty extension)
     if (len > 0 && idf[len - 1] == '.')
         len--;
 
@@ -73,7 +73,8 @@ static int iso_namecmp(const char *idf, u8 idf_len, const char *name)
 
 // Walk all directory records inside a directory whose first data block is at
 // dir_lba and whose total size is dir_size bytes
-static struct iso_dir *find_in_dir(u32 dir_lba, u32 dir_size, const char *name)
+static int find_in_dir(u32 dir_lba, u32 dir_size, const char *name,
+                       struct iso_dir *out)
 {
     u32 bytes_left = dir_size;
     u32 lba = dir_lba;
@@ -101,7 +102,10 @@ static struct iso_dir *find_in_dir(u32 dir_lba, u32 dir_size, const char *name)
             }
 
             if (iso_namecmp(d->idf, d->idf_len, name) == 0)
-                return d;
+            {
+                memcpy(out, d, sizeof(struct iso_dir));
+                return 1;
+            }
 
             off += d->dir_size;
         }
@@ -110,7 +114,7 @@ static struct iso_dir *find_in_dir(u32 dir_lba, u32 dir_size, const char *name)
             (bytes_left > ISO_BLOCK_SIZE ? ISO_BLOCK_SIZE : bytes_left);
         lba++;
     }
-    return NULL;
+    return 0;
 }
 
 // Resolve a full absolute path starting from the root directory described in
@@ -161,16 +165,12 @@ static int resolve_path(const char *pathname, u32 *out_lba, u32 *out_size)
         }
 
         // find this component in the current directory
-        struct iso_dir *entry = find_in_dir(dir_lba, dir_size, p);
-        if (!entry)
+        struct iso_dir entry_copy;
+        if (!find_in_dir(dir_lba, dir_size, p, &entry_copy))
         {
             printf("[!] fs: component '%s' not found\r\n", p);
             return -1;
         }
-
-        // copy entry to avoid it being clobbered by next get_block
-        struct iso_dir entry_copy;
-        memcpy(&entry_copy, entry, sizeof(entry_copy));
 
         dir_lba = entry_copy.data_blk.le;
         dir_size = entry_copy.file_size.le;

@@ -30,6 +30,7 @@ ROMS	= \
 	  roms/perrodlauncher \
 	  roms/skate \
 	  roms/yakanoid \
+	  roms/doom \
 
 
 SUBDIRS	= \
