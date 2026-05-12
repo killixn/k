@@ -123,14 +123,23 @@ void keyboard_irq_handler()
     int curr_state = (scancode & 0x80) ? KEY_RELEASED : KEY_PRESSED;
 
     // Translate scancode to ASCII
-    char c = 0;
+    int keycode;
     int use_shift = shift_pressed ^ caps_lock;
 
     if (key < (int)sizeof(keymap_normal))
     {
-        c = use_shift ? keymap_shift[key] : keymap_normal[key];
+        char c = use_shift ? keymap_shift[key] : keymap_normal[key];
+
+        if (c >= 32 && c < 127)
+            keycode = c;
+        else
+            keycode = key;
+    }
+    else
+    {
+        keycode = key;
     }
 
-    struct key_event event = { .state = curr_state, .key = c ? c : key };
+    struct key_event event = { .state = curr_state, .key = keycode };
     fifo_push(&keyboard_fifo, event);
 }
