@@ -167,7 +167,7 @@ void irq_handler(struct regs *r)
         printf("[i] IRQ Handler: Hard disk controller 2\r\n");
         break;
     case 128:
-        // printf("[i] IRQ Handler: Syscall intercepted\r\n");
+        // printf("[i] IRQ Handler: Syscall intercepted %d\r\n", r->eax);
         syscall_handler(r);
         break;
     default:

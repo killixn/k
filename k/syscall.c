@@ -44,6 +44,7 @@ void init_syscall()
     }
 
     // fill the syscall dispatch table with the developed syscalls
+    register_syscall(SYSCALL_TEST, sys_unknown);
     register_syscall(SYSCALL_WRITE, sys_write);
     register_syscall(SYSCALL_SBRK, sys_sbrk);
     register_syscall(SYSCALL_GETKEY, sys_getkey);

@@ -2,9 +2,9 @@
 
 #include "sbrk.h"
 
-u8 *heap_start;
-u8 *heap_end;
-u8 *heap_limit;
+static u8 *heap_start;
+static u8 *heap_end;
+static u8 *heap_limit;
 
 /*
 NAME

@@ -3,6 +3,7 @@
 #include "timer.h"
 
 #include "io.h"
+#include "sound.h"
 
 volatile unsigned long tick;
 
@@ -52,4 +53,5 @@ unsigned long gettick(void)
 void pit_irq_handler()
 {
     tick++;
+    sound_tick();
 }

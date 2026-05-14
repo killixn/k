@@ -45,6 +45,7 @@ OBJS	= \
 	  atapi.o \
 	  sbrk.o \
 	  elf.o \
+	  sound.o \
 
 DEPS = $(OBJS:.o=.d)
 

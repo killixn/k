@@ -7,7 +7,7 @@
 #include "stdio.h"
 #include "string.h"
 
-#define MAX_FD 16
+#define MAX_FD 32
 
 static fd_entry_t fd_table[MAX_FD];
 
@@ -220,7 +220,7 @@ NOTES
 */
 int open(const char *pathname, int flags)
 {
-    if (!pathname)
+    if (!pathname || pathname[0] == '\0')
     {
         return -1;
     }

@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "sbrk.h"
 #include "serial.h"
+#include "sound.h"
 #include "stdio.h"
 #include "timer.h"
 #include "vga.h"
@@ -22,7 +23,8 @@ int sys_unknown(struct regs *r)
 // from serial.c
 int sys_write(struct regs *r)
 {
-    return write((char *)r->ecx, (size_t)r->edx);
+    write_serial((char)r->ecx);
+    return 0;
 }
 
 // from sbrk.c
@@ -82,21 +84,20 @@ int sys_swap_frontbuffer(struct regs *r)
     return 0;
 }
 
-// TODO : implement playsound syscall
+// from sound.c
 int sys_playsound(struct regs *r)
 {
-    (void)r;
-    return 0;
+    return playsound((struct melody *)r->ebx, (int)r->ecx);
 }
 
-// TODO : implement setpalette syscall
+// from vga.c
 int sys_setpalette(struct regs *r)
 {
-    (void)r;
+    set_palette((u32 *)r->ebx, (size_t)r->ecx);
     return 0;
 }
 
-// TODO : implement getmouse syscall
+// TODO : implement mouse syscall
 int sys_getmouse(struct regs *r)
 {
     (void)r;

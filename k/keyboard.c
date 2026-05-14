@@ -130,7 +130,7 @@ void keyboard_irq_handler()
     {
         char c = use_shift ? keymap_shift[key] : keymap_normal[key];
 
-        if (c >= 32 && c < 127)
+        if (c > 32 && c < 127)
             keycode = c;
         else
             keycode = key;
