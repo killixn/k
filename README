@@ -1,0 +1,43 @@
+k
+
+A from-scratch x86 kernel written in C. Implements boot sequence (GRUB/
+Multiboot), protected mode, GDT/IDT, interrupts and exceptions, PIC,
+syscalls, VGA framebuffer, serial/keyboard/mouse/timer/sound drivers,
+ATAPI, ISO 9660 filesystem, ELF binary loading, memory allocator, sbrk,
+and userland execution.
+
+Dependencies:
+    gcc-multilib
+    grub2
+    libisoburn
+    bochs (with SDL2 support, for debugging)
+    find
+
+Build:
+    make            # build k.iso with all roms
+    make k          # compile the kernel only
+    make rom/GAME   # compile a specific rom
+    make clean      # clean the tree
+
+Boot:
+    qemu-system-i386 -cdrom k.iso
+    qemu-system-i386 -cdrom k.iso -serial stdio -machine pcspk-audiodev=snd -audiodev pa,id=snd
+
+Debug:
+Using Bochs (recommended):
+    bochs
+
+Using QEMU + GDB:
+    qemu-system-i386 -cdrom k.iso -s -S
+    gdb k/k
+    (gdb) target remote localhost:1234
+    (gdb) b my_symbol
+    (gdb) continue
+
+Full documentation, usage, and assignment guides are available at:
+
+    https://k.lse.epita.fr/
+
+For additional technical details, see:
+    *   https://wiki.osdev.org/
+    *   Intel 64 and IA-32 Architectures SDM
